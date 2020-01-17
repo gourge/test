@@ -1,0 +1,165 @@
+经过笔者的反复碰壁，得出想在arm机上安装docker，至少要确保命令apt，dpkg，install，systemctl等命令存在，以及kernel的完整。
+如果刚烧完ubuntu16.04的板子，无法远程登录，可能是ssh未安装，可通过附件ssh压缩包进行安装（内有安装步骤，其中启动文件是/etc/rc.local文件）
+
+Ubuntu 14.04 16.04 (使用apt-get进行安装)
+# step 1: 安装必要的一些系统工具
+sudo apt-get update
+sudo apt-get -y install apt-transport-https ca-certificates curl software-properties-common
+注：若在sudo apt-get update命令之后，出现问题：Err:1 http://ports.ubuntu.com xenial InRelease Temporary failure resolving ‘ports.ubuntu.com’，采用以下方法解决
+打开“/etc/resolv.conf”文件并添加两行：
+nameserver 223.5.5.5
+nameserver 223.6.6.6
+# step 2: 安装GPG证书
+curl -fsSL http://mirrors.aliyun.com/docker-ce/linux/ubuntu/gpg | sudo apt-key add -
+# Step 3: 写入软件源信息
+sudo add-apt-repository "deb [arch=armhf]http://mirrors.aliyun.com/docker-ce/linux/ubuntu $(lsb_release -cs) stable"
+# Step 4: 更新并安装Docker-CE
+sudo apt-get -y update
+sudo apt-get -y install docker-ce
+#Step 5 启动docker后台服务
+Sudo systemctl start docker
+#step 6 检查是否启动成功
+sudo docker version
+若显示如下所示则表明启动成功（即既有client又有server）
+
+
+#step 7修改启动配置文件，由于reboot后默认路由会改变
+vi /etc/rc.local
+添加几行
+设置ip和掩码
+ifconfig enx000ec6877201 192.168.1.202 netmask 255.255.255.0
+启动网络
+ifconfig enx000ec6877201 up
+添加默认路由
+route add default gw 192.168.1.1
+解决dns解析问题
+echo "nameserver 223.5.5.5" >> /etc/resolv.conf
+echo "nameserver 223.6.6.6" >> /etc/resolv.conf
+
+#step 8 测试hello-world
+sudo docker run hello-world
+
+若显示以上错误，说明docker后台服务没启动，输入命令sudo systemctl start docker来解决
+
+出现以上问题可以在docker run时添加--privileged参数
+若出现以上错误，是由于docker容器的配置文件docker-default自动生成失败，可以通过以下操作为容器设置配置文件：
+1）自己建立一个/etc/apparmor.d/containers/docker-nginx容器配置文件（路径和名字任意，文件内容在文档下面）
+2）将新配置文件加载到 AppArmor 以用于容器
+apparmor_parser -r -W /etc/apparmor.d/containers/docker-nginx
+3）在运行容器时，为容器选择安全策略（即配置文件）,例如运行ubuntu14.04版本的容器
+docker run --security-opt "apparmor=docker-nginx" -dit ubuntu:14.04
+注：-dit其实是三个选项（-i,-d,-t），若想容器可以一直运行要加上-d选项，否则容器如果没有前端在运行就会自动结束运行{一般使用docker ps -a 后会发现容器的Status为Exit（1）}
+
+
+
+从 AppArmor 卸载配置文件：
+# stop apparmor $ /etc/init.d/apparmor stop # unload the profile $ apparmor_parser -R /path/to/profile # start apparmor $ /etc/init.d/apparmor start
+
+
+docker-nginx文件内容如下：
+
+
+
+
+#include <tunables/global>
+
+
+profile docker-nginx flags=(attach_disconnected,mediate_deleted) {
+  #include <abstractions/base>
+
+  network inet tcp,
+  network inet udp,
+  network inet icmp,
+
+  deny network raw,
+
+  deny network packet,
+
+  file,
+  umount,
+
+  deny /bin/** wl,
+  deny /boot/** wl,
+  deny /dev/** wl,
+  deny /etc/** wl,
+  deny /home/** wl,
+  deny /lib/** wl,
+  deny /lib64/** wl,
+  deny /media/** wl,
+  deny /mnt/** wl,
+  deny /opt/** wl,
+  deny /proc/** wl,
+  deny /root/** wl,
+  deny /sbin/** wl,
+  deny /srv/** wl,
+  deny /tmp/** wl,
+  deny /sys/** wl,
+  deny /usr/** wl,
+
+  audit /** w,
+
+  /var/run/nginx.pid w,
+
+  /usr/sbin/nginx ix,
+
+  deny /bin/dash mrwklx,
+  deny /bin/sh mrwklx,
+  deny /usr/bin/top mrwklx,
+
+
+  capability chown,
+  capability dac_override,
+  capability setuid,
+  capability setgid,
+  capability net_bind_service,
+
+  deny @{PROC}/* w,   # deny write for all files directly in /proc (not in a subdir)
+  # deny write to files not in /proc/<number>/** or /proc/sys/**
+  deny @{PROC}/{[^1-9],[^1-9][^0-9],[^1-9s][^0-9y][^0-9s],[^1-9][^0-9][^0-9][^0-9]*}/** w,
+  deny @{PROC}/sys/[^k]** w,  # deny /proc/sys except /proc/sys/k* (effectively /proc/sys/kernel)
+  deny @{PROC}/sys/kernel/{?,??,[^s][^h][^m]**} w,  # deny everything except shm* in /proc/sys/kernel/
+  deny @{PROC}/sysrq-trigger rwklx,
+  deny @{PROC}/mem rwklx,
+  deny @{PROC}/kmem rwklx,
+  deny @{PROC}/kcore rwklx,
+
+  deny mount,
+
+  deny /sys/[^f]*/** wklx,
+  deny /sys/f[^s]*/** wklx,
+  deny /sys/fs/[^c]*/** wklx,
+  deny /sys/fs/c[^g]*/** wklx,
+  deny /sys/fs/cg[^r]*/** wklx,
+  deny /sys/firmware/** rwklx,
+  deny /sys/kernel/security/** rwklx,
+}
+
+//配置daemon.json文件
+{
+  "registry-mirrors": ["http://harbor.test.com"],
+  "insecure-registries": ["http://114.116.149.174:5000"]
+}
+//给本地镜像打标签
+docker tag hello-world 114.116.149.174:5000/hello-world:v1
+//上传仓库
+docker push 114.116.149.174:5000/hello-world:v1
+//查看远程仓库所有镜像
+curl -XGET http://114.116.149.174:5000/v2/_catalog
+//拉取镜像
+docker pull 114.116.149.174:5000/hello:v1
+
+
+
+制作Dockerfile
+#基础镜像，如果本地存在的话，使用本地的
+FROM ubuntu:v1
+MAINTAINER  lfq
+#将本地的jdk放入ubuntu中
+COPY  jdk1.8.0_201 /usr/local/
+#将本地jar包放在ubuntu根目录下，取别名为app.jar
+ADD  hmcloundnode.jar  /app.jar
+
+#配置java环境
+ENV JAVA_HOME /usr/local/ jdk1.8.0_201
+ENV CLASSPATH $JAVA_HOME/lib/dt.jar:$JAVA_HOME/lib/tools.jar
+ENV PATH $PATH:$JAVA_HOME/bin
