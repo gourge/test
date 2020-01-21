@@ -1,0 +1,14 @@
+nginx lua插载点：
+init_by_lua 系统启动时调用
+init_worker_by_lua  worker进程启动时调用
+set_by_lua  nginx变量用复杂lua return
+rewrite_by_lua  重写url规则
+access_by_lua 权限验证阶段
+content_by_lua  内容输出节点
+
+创建一个脚本hello.lua，假设在nginx目录下，内容如下:
+ngx.exec("/user/get?id=6");
+在nginx.conf配置文件中添加location，如下
+location /hello {
+  content_by_lua_file ./hello.lua;
+}
