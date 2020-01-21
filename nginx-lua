@@ -1,3 +1,5 @@
+使用nginx-lua进行优化(缺点：更新机制不好)
+
 nginx lua插载点：
 init_by_lua 系统启动时调用
 init_worker_by_lua  worker进程启动时调用
