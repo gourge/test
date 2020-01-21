@@ -1,0 +1,15 @@
+1、编写user_redis.lua脚本，假设在nginx目录下
+local args = ngx.req.get_uri_args()
+local id = args["id"]
+local redis = require "resty.redis"
+#新建redis连接
+local redis_cache = redis:new()
+local ok,error = redis_cache:connect("填写ip",端口号)
+local key = "user_"..id
+local user_model = redis_cache:get(key)
+#只读不写
+if user_model == ngx.null or user_model == nil then
+  local resp = ngx.location.capture("/user/get?id="..id)
+  user_model = resp.body
+end
+ngx.say(user_model)
