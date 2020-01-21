@@ -6,9 +6,49 @@ rewrite_by_lua  重写url规则
 access_by_lua 权限验证阶段
 content_by_lua  内容输出节点
 
+使用案例1：
 创建一个脚本hello.lua，假设在nginx目录下，内容如下:
 ngx.exec("/user/get?id=6");
 在nginx.conf配置文件中添加location，如下
 location /hello {
   content_by_lua_file ./hello.lua;
 }
+
+使用案例2：使用shared dictionary（共享内存字典，所有worker进程可见，采用lru策略）
+1、配置shared dictionary，在nginx.conf文件中添加：
+#my_cache 自己取名,内存123m
+lua_shared_dic my_cache 123m
+2、编写lua脚本，内容如下
+#定义一个根据key获取缓存内容的函数
+function get_from_cache(key)
+  #声明一个local变量
+  local cache_ngx = ngx.shared.my_cache
+  local value = cache_ngx.get(key)
+  return value
+end
+
+function set_to_cache(key,value,expiretime)
+  #当expiretime没有值时
+  if not expiretime then
+    expiretime=0
+  end
+  local cache_ngx = ngx.shared.my_cache
+  local succ,error,forcible = cache_ngx:set(key,value,expiretime)
+  return succ
+end
+#获取向nginx请求的uri参数
+local args = ngx.req.get_uri_args()
+local id = args["id"]
+local user_model =  get_from_cache("user_"..id) #..表示字符串拼接
+#nil表示null
+if user_model == nil then
+  #向后端请求
+  local resp = ngx.location.capture("/user/get?id="..id)
+  user_model = resp.body
+  local key = "user_"..id
+  #缓存1分钟
+  set_to_cache(key,user_model,60)
+end
+
+#输出
+ngx.say(user_model)
