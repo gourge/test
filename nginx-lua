@@ -22,7 +22,7 @@ location /hello {
 lua_shared_dic my_cache 123m;
 #配置location
 location /testsharedic/get {
-  default_type "application/json"
+  default_type "application/json";
   content_by_lua_file ./usersharedic.lua;
 }
 
