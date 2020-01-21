@@ -17,7 +17,7 @@ location /hello {
 使用案例2：使用shared dictionary（共享内存字典，所有worker进程可见，采用lru策略）
 1、配置shared dictionary，在nginx.conf文件中添加：
 #my_cache 自己取名,内存123m
-lua_shared_dic my_cache 123m
+lua_shared_dic my_cache 123m;
 #配置location
 location /testsharedic/get {
   default_type "application/json"
@@ -29,7 +29,7 @@ location /testsharedic/get {
 function get_from_cache(key)
   #声明一个local变量
   local cache_ngx = ngx.shared.my_cache
-  local value = cache_ngx.get(key)
+  local value = cache_ngx:get(key)
   return value
 end
 
