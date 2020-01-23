@@ -1,0 +1,2 @@
+//每秒钟产生10个令牌
+RateLimiter limiter = RateLimiter.create(10);
